@@ -1,11 +1,12 @@
-import { prismaClient } from "../app/database";
-import { ResponseError } from "../error/response-error";
+import { prismaClient } from "../app/database.js";
+import { ResponseError } from "../error/response-error.js";
 import {
   createContactValidation,
   getContactValidation,
+  searchContactValidation,
   updateContactValidation,
-} from "../validations/contact-validation";
-import { validate } from "../validations/validations";
+} from "../validations/contact-validation.js";
+import { validate } from "../validations/validations.js";
 
 const create = async (user, request) => {
   const contact = validate(createContactValidation, request);
@@ -102,9 +103,74 @@ const remove = async (user, contactId) => {
   });
 };
 
+const search = async (user, request) => {
+  request = validate(searchContactValidation, request);
+
+  const skip = (request.page - 1) * request.size;
+
+  const filter = [];
+
+  filter.push({
+    username: user,
+  });
+
+  if (request.name) {
+    filter.push({
+      OR: [
+        {
+          first_name: {
+            contains: request.name,
+          },
+          last_name: {
+            contains: request.name,
+          },
+        },
+      ],
+    });
+  }
+  if (request.email) {
+    filter.push({
+      email: {
+        contains: request.email,
+      },
+    });
+  }
+
+  if (request.phone) {
+    filter.push({
+      phone: {
+        contains: request.phone,
+      },
+    });
+  }
+  const contacts = await prismaClient.contact.findMany({
+    where: {
+      AND: filter,
+    },
+    take: request.size,
+    skip: skip,
+  });
+
+  const totalItem = await prismaClient.contact.count({
+    where: {
+      AND: filter,
+    },
+  });
+
+  return {
+    data: contacts,
+    paging: {
+      page: request.page,
+      total_item: totalItem,
+      total_page: Math.ceil(totalItem / request.size),
+    },
+  };
+};
+
 export default {
   create,
   get,
   update,
   remove,
+  search,
 };
